@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Find your fit</title>
+	<style>
+	body {
+            background-image: url('{{ url_for('static', filename='Background image.avif') }}'); 
+            background-position: center; 
+            background-repeat: no-repeat; 
+            background-size: cover; 
+	    text-align: center;
+        }
+	h1 { 
+        font-size: 50px;    
+	color: white; /* Example: Soft Blue */
+	margin-top: 50px; /* Adjust the value as needed */
+	
+        }
+	h2 { 
+            color: white; /* Set the color of the second header to white */
+            text-align: center; 
+            background-color: #3498db; /* Set a background color for the second header */
+            padding: 10px; /* Add some padding for better visual separation */
+	margin-bottom: 50px; /* Adjust the value as needed */
+        }
+    #predictButton {
+      padding: 15px 30px; 
+      font-size: 18px; 
+      font-family: 'Arial', sans-serif;
+      background-color: #D3D3D3; /* Set the desired button color here */
+      color: #000; /* Set the text color to black */
+      border: none; /* Remove default button border */
+      border-radius: 5px; /* Add rounded corners (optional) */ 
+    }
+	.loading-bar {
+	  background-color: #ccc; /* Grey background */
+	  color: #000; /* Black text */
+	font-size: 18px;
+	  padding: 10px;
+	  text-align: center;
+	  display: none; /* Initially hidden */
+	}
+	span {
+             color: white;
+	font-size: 20px; /* Increase font size */
+    	font-family: 'Open Sans', sans-serif; /* Change font family */
+	margin-right: 10px; /* Add margin to the right of the span */
+  	}
+      #result {
+	color: #fff; /* Set the font color to white */ 
+	}
+  </style>
+</head>
+<body>
+    <h1>FIND YOUR FIT! </h1>
+     <h2>A size classification app for you </h2> 
+
+    <video id="video" width="320" height="240" autoplay></video>
+    <canvas id="canvas" width="320" height="240" style="display: none;"></canvas>
+
+    <button id="captureButton">Capture</button>
+	<br> <br> <br> <br>
+	<span>Please click here to predict the size after capturing the image </span>
+    <button id="predictButton" disabled>Predict Size</button>
+	<br> <br>
+	<div id="loading-message" class="loading-bar"> 
+	Please hold on while we crack the calculations..... 
+	<br> 
+        Wondering if it's time to shop for new clothes? 
+	<br>
+	Well, make sure it doesn't go wrong by knowing your fit this time! :)
+	</div>
+	
+    <div id="result"></div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const captureButton = document.getElementById('captureButton');
+        const predictButton = document.getElementById('predictButton');
+		//const progressDiv = document.getElementById('progress');
+		//const progressBar = document.getElementById('progress-bar');
+        const resultDiv = document.getElementById('result');
+		let capturedFilename = null; // Store the filename
+
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                video.srcObject = stream;
+            })
+            .catch(err => {
+                console.error("Error accessing camera:", err);
+            });
+
+        captureButton.addEventListener('click', () => {
+            resultDiv.style.display = 'none';
+			canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+			// Generate a unique filename
+            const now = new Date();
+            //const capturedFilename = `captured_image_${now.getTime()}.jpg`; 
+
+            // Convert canvas to data URL
+            const imageData = canvas.toDataURL('image/jpeg');
+
+            // Extract the image data from the URL
+            const base64Data = imageData.split(',')[1];
+
+            // Create a Blob from the base64 data
+            const blob = new Blob([atob(base64Data)], { type: 'image/jpeg' });
+			// Save the image as a file (using FileSaver.js)
+           // saveAs(blob, capturedFilename); 
+			// Send image data to server for saving and get filename
+            fetch('/upload', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ imageData: base64Data }) 
+            })
+            .then(response => response.json())
+            .then(data => {
+                capturedFilename = data.filename; 
+                predictButton.disabled = false; 
+            })
+            .catch(error => {
+                console.error("Error:", error);
+                resultDiv.innerHTML = "An error occurred during upload.";
+            });
+           
+        });
+
+        predictButton.addEventListener('click', () => {
+		// Show progress bar
+			//progressBar.style.width = '0%'; 
+			//progressDiv.style.display = 'block';
+			// Show the loading bar
+			resultDiv.style.display = 'none';
+			document.getElementById('loading-message').style.display = 'inline-block'; 			
+            if (capturedFilename) { 
+                fetch('/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ filename: capturedFilename }) 
+                })
+                .then(response => response.json())
+                .then(data => {
+				// Hide progress bar
+					//progressDiv.style.display = 'none'; 
+					// Hide progress bar and loading text
+					// Hide the loading bar
+					document.getElementById('loading-message').style.display = 'none';
+                  //  if (data.predicted_size) {
+                   // window.location.href = `/127.0.0.1:5000/result?size=' + data.predicted_size + '&imageData=' //+ 			imageData; 
+				    // Display the predicted size on the same screen
+					//document.getElementById("result").innerHTML = "Predicted Size: " + data.predicted_size;
+					//resultDiv.innerHTML = "Predicted Size: " + data.predicted_size;
+					//} else if (data.error) {
+                    //alert("Prediction failed: " + data.error); 
+					//resultDiv.innerHTML = `Predicted Size: ${data.size}`; 
+					resultDiv.style.display = 'block'
+					resultDiv.innerHTML = `<p style="font-size: 34px;color: white;"> Your predicted dress size: ${data.size}</p>`;
+                //}
+                })
+                .catch(error => {
+                    console.error("Error:", error);
+                    resultDiv.innerHTML = "An error occurred during prediction.";
+                });
+            } else {
+                alert("Please capture an image first.");
+            }
+        });
+    </script>
+
+</body>
+</html>
